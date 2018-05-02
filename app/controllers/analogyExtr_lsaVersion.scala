@@ -131,7 +131,7 @@ class analogyExtr_lsaVersion(lsa: Vector[Vector[Double]], wordListRows: Vector[S
       }
     })._1
     // TODO WrappedArray(, , , , , , , this, be, a, test, as, well, ., '') there are to many whitespaces
-    aa.toLowerCase()
+    aa.toLowerCase().filter(!_.equals(""))
   }
 
 
@@ -157,10 +157,10 @@ class analogyExtr_lsaVersion(lsa: Vector[Vector[Double]], wordListRows: Vector[S
     }
     val vectorsResult: Seq[Vector[Double]] = vectors.result()
     //val vectorSum: MatrixLike = vectorsResult.reduce(_ + _).compute()
-    if (vectorsResult.size > 0) {
+    if (vectorsResult.size > 0) {// check if there is at least one vector which we can sum up
       val vectorsSum: Vector[Double] = vectorsResult.reduce((x, y) => x.zip(y).map { case (x, y) => x + y })
       new DenseMatrix(1, vectorsSum.length, vectorsSum.toArray)
-    } else {
+    } else { // if not numcols = 2 indicates that
       new DenseMatrix(1, 2, Array(1, 1))
     }
 
@@ -194,10 +194,10 @@ class analogyExtr_lsaVersion(lsa: Vector[Vector[Double]], wordListRows: Vector[S
   // API
   // - - - - - - - - - - - - - - - - - - - - - - - - -
 
-  def calcDistanceAPI(doc2: String): scala.collection.mutable.ArrayBuffer[Tuple2[Seq[Tuple2[String, Double]], Double]] = {
+  def calcDistanceAPI(doc2: String): scala.collection.mutable.ArrayBuffer[Tuple3[Seq[Tuple2[String, Double]], Double,String]] = {
     val borderForCosAngle: Double = 0.0 // not important atm
     var cosOfAngleFirstWordSecondWord: Double = 0
-    val returnList = scala.collection.mutable.ArrayBuffer[Tuple2[Seq[Tuple2[String, Double]], Double]]()
+    val returnList = scala.collection.mutable.ArrayBuffer[Tuple3[Seq[Tuple2[String, Double]], Double,String]]()
 
     // - - - - - - - - - - - - - - - - - - - - - - - - -
     //
@@ -228,15 +228,15 @@ class analogyExtr_lsaVersion(lsa: Vector[Vector[Double]], wordListRows: Vector[S
             val tokenLength = lengthOfVector(tokenVector)
             val x = ((vectorDoc1 * tokenVector.transpose).compute())
             val xxxx: Double = (x / (lengthFirstWordVector * tokenLength)).compute().toString.toDouble
-            println("token: "+token+"xxxx: "+xxxx)
+            println("token: "+token+" similarity: "+xxxx)
             tokenAndDouble.put(token, xxxx)
           } else {
-            println("token: "+token+"xxxx: zero")
+            println("token: "+token+" similarity: 0")
             tokenAndDouble.put(token, 0)
           }
         }
 
-        returnList.append(Tuple2(tokenAndDouble.toList, cos))
+        returnList.append(Tuple3(tokenAndDouble.toList, cos,doc2))
 
       }
     })

@@ -3,6 +3,9 @@ POST    /                controllers.HomeController_lsaVersion.save()
 
 POST    /getner                controllers.HomeController_lsaVersion.getNER()
 
+POST    /getanalogies                controllers.HomeController_lsaVersion.getAnalogies()
+
+
 
 #->         /v1/posts               v1.post.PostRouter
 

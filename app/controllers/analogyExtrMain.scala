@@ -362,22 +362,66 @@ object analogyExtrMain {
     // filter occurrences, only keep words with these POS: JJ JJR JJS NN NNS NNP NNPS PDT RB RBR RBS RP VB VBD VBG VBN VBP VBZ VBG
     // - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    val wordListRows = scala.Vector.newBuilder[String]
+    val wordListRowsAndCols = scala.Vector.newBuilder[String]
+    val wordListColsMUSTBEDELETED = scala.Vector.newBuilder[Int]
+    val wordListColsRemain = scala.Vector.newBuilder[Int]
     var IndicesCleaned = scala.Vector.newBuilder[scala.Vector[Int]]
     var ValuesCleaned = scala.Vector.newBuilder[scala.collection.immutable.Vector[Double]]
+
+    for(i<- 0 until wordListCols.result().size){
+      val word = wordListCols.result()(i)
+      val pos = getPOS(word)
+      if(pos == "JJ" || pos == "JJR" || pos == "JJS" || pos == "NN" || pos == "NNS" || pos == "NNP" || pos == "NNPS" || pos == "PDT" || pos == "RB" || pos == "RBR" || pos == "RBS" || pos == "RP" || pos == "VB" || pos == "VBD" || pos == "VBG" || pos == "VBN" || pos == "VBP" || pos == "VBZ" || pos == "VBG"){
+        wordListColsRemain += i
+      }else{
+        wordListColsMUSTBEDELETED += i
+      }
+    }
+
+    val wordListColsMUSTBEDELETEDasSet = wordListColsMUSTBEDELETED.result().toSet
+    val wordListColsRemainasSet = wordListColsRemain.result().toSet
+    println(wordListColsMUSTBEDELETEDasSet)
+
     
     for(i<- 0 until wordListCols.result().size){
       val word = wordListCols.result()(i)
       val pos = getPOS(word)
       if(pos == "JJ" || pos == "JJR" || pos == "JJS" || pos == "NN" || pos == "NNS" || pos == "NNP" || pos == "NNPS" || pos == "PDT" || pos == "RB" || pos == "RBR" || pos == "RBS" || pos == "RP" || pos == "VB" || pos == "VBD" || pos == "VBG" || pos == "VBN" || pos == "VBP" || pos == "VBZ" || pos == "VBG"){
-        wordListRows += word
-        IndicesCleaned += Indices(i)
-        ValuesCleaned += Values(i)
+        wordListRowsAndCols += word
+        val filtered: scala.Vector[(Int, Double)] = Indices(i).zip(Values(i)).filter(y=>{!(wordListColsMUSTBEDELETEDasSet.contains(y._1))})
+        val IndicesFiltered: scala.Vector[Int] = filtered.map(_._1)
+        val ValuesFiltered: scala.Vector[Double] = filtered.map(_._2)
+
+        IndicesCleaned += IndicesFiltered
+        ValuesCleaned += ValuesFiltered
       }
     }
 
-    println("wordListRows.size: " + wordListRows.result().size)
-    println("IndicesCleaned.size: " + IndicesCleaned.result().size)
+
+    var IndicesCleaned2 = scala.Vector.newBuilder[scala.Vector[Int]]
+    val replacements: Set[(Int, Int)] = wordListColsRemainasSet.zipWithIndex
+
+    for(d <- IndicesCleaned.result()){
+      val newIndicesLine = scala.Vector.newBuilder[Int]
+      d.foreach(Indice=>{
+        replacements.foreach(replacement=>{
+          if(replacement._1==Indice){
+            newIndicesLine += replacement._2
+          }
+        })
+      })
+      IndicesCleaned2 += newIndicesLine.result()
+    }
+
+
+
+
+
+
+
+
+    println("wordListRowsAndCols.size: " + wordListRowsAndCols.result().size)
+    println("IndicesCleaned.size: " + IndicesCleaned2.result().size)
     println("ValuesCleaned.size: " + ValuesCleaned.result().size)
 
 
@@ -389,8 +433,8 @@ object analogyExtrMain {
 
 
     new PrintWriter("data/indices.txt") { // open new file
-      for (i<-0 until IndicesCleaned.result().size){
-        for (j<-0 until IndicesCleaned.result()(i).size) {
+      for (i<-0 until IndicesCleaned2.result().size){
+        for (j<-0 until IndicesCleaned2.result()(i).size) {
           write(IndicesCleaned.result()(i)(j)+",")
         }
         write("\n")
@@ -407,19 +451,13 @@ object analogyExtrMain {
       }
       close // close file
     }
-    new PrintWriter("data/wordListRows.txt") { // open new file
-      for (i<-0 until wordListRows.result().size){
-        write(wordListRows.result()(i)+",")
+    new PrintWriter("data/wordListRowsAndCols.txt") { // open new file
+      for (i<-0 until wordListRowsAndCols.result().size){
+        write(wordListRowsAndCols.result()(i)+",")
       }
       close // close file
     }
-    new PrintWriter("data/wordListCols.txt") { // open new file
-      for (i<-0 until wordListCols.result().size){
-        write(wordListCols.result()(i)+",")
-      }
-      close // close file
-    }
-
+/*
     val data = Array.newBuilder[linalg.Vector]
     for (i<-0 until IndicesCleaned.result().size){
       data += Vectors.sparse(wordListCols.result().size,IndicesCleaned.result()(i).toArray,ValuesCleaned.result()(i).toArray)
@@ -427,7 +465,7 @@ object analogyExtrMain {
 
     println("data: "+data.result()(0).toDense)
 
-    /*new PrintWriter("data/sparseMatrix.txt") { // open new file
+    new PrintWriter("data/sparseMatrix.txt") { // open new file
       for (i<- data.result()){
         i.toDense.toArray.foreach(x=>write(x.toString+" "))
         write("\n")
@@ -443,7 +481,7 @@ object analogyExtrMain {
     }
 
     new PrintWriter("data/col.txt") { // open new file
-      for (i<- IndicesCleaned.result()){
+      for (i<- IndicesCleaned2.result()){
         i.foreach(x=>write(x.toString+" "))
       }
       close // close file
@@ -603,17 +641,9 @@ object analogyExtrMain {
   }
 
   def main(args: Array[String]): Unit = {
-    val x = Array(1,1)
-    val d = Vector.newBuilder[Array[Int]]
-    for(i<-0 until 3){
-      d+=x
-    }
-    val dd = d.result()
-    val ddd= dd.reduce((x,y)=>x.zip(y).map { case (x, y) => x + y })
 
-    println(ddd.mkString(" "))
-    //allCoOccurrences(5000)
-    //calcPCOnTestStrings()
+    allCoOccurrences(10) // 1. to get a cooc matrix
+    //calcPCOnTestStrings() // 2. calc pca on it : but very slow, better use python
   }
 }
 

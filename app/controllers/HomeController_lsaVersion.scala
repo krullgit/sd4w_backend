@@ -9,6 +9,7 @@ import javax.inject.Inject
 import org.apache.spark.mllib.linalg.DenseMatrix
 import play.api.libs.json._
 import play.api.mvc._
+import controllers.analogyHelpers.readAnalogies
 
 import scala.io.Source
 
@@ -28,8 +29,16 @@ class HomeController_lsaVersion @Inject()(cc: ControllerComponents) extends Abst
     lsa+=(lsaFile(i).split(" ").map(_.toDouble).toVector)
   }
 
-  val wordListRows: Vector[String] = Source.fromFile("data/wordListRows.txt").getLines().toVector(0).split(",").toVector
+  val wordListRows: Vector[String] = Source.fromFile("data/wordListRowsAndCols.txt").getLines().toVector(0).split(",").toVector
   println("READY lsa")
+
+  // - - - - - - - - - - - - - - - - - - - - - - - - -
+  // load analogies
+  // - - - - - - - - - - - - - - - - - - - - - - - - -
+
+  println("READ ANALOGIES")
+  val analogies: Map[String, Vector[(String, String)]] = readAnalogies()
+  println("READY ANALOGIES")
 
   // - - - - - - - - - - - - - - - - - - - - - - - - -
   // load the stanford annotator for NER tagging and lemmatisation
@@ -70,11 +79,20 @@ class HomeController_lsaVersion @Inject()(cc: ControllerComponents) extends Abst
     }
   */
   def save = Action { request =>
-    val doc1Potential:String = request.body.asJson.get("doc1").toString()
-    println("doc1Potential: "+doc1Potential)
+    val doc1Potential:String = request.body.asJson.get("doc1").toString().drop(1).dropRight(1)
+    println(doc1Potential)
     if(!doc1.equals(doc1Potential)){
       println("doc1 will change")
-      doc1 = request.body.asJson.get("doc1").toString()
+      var doc1PotentialPlusAnalogies: String = doc1Potential
+      val NERsOfDoc1: Array[String] = newAnaloyExtraction.getNER(doc1Potential).split(" ")
+      NERsOfDoc1.foreach(x=>{
+        analogies.get(x) match{
+          case Some(foundAnalogy) => doc1PotentialPlusAnalogies += " "+ foundAnalogy(0)._1
+          case None => println("No analogy found")
+        }
+      })
+      println("doc1PotentialPlusAnalogies + NERsOfDoc1: "+doc1PotentialPlusAnalogies)
+      doc1 = doc1PotentialPlusAnalogies
       calcDoc1()
     }
     val doc2:String = request.body.asJson.get("doc2").toString()
@@ -86,5 +104,23 @@ class HomeController_lsaVersion @Inject()(cc: ControllerComponents) extends Abst
     val sentence:String = request.body.asJson.get("sentence").toString()
 
     Ok(Json.toJson(newAnaloyExtraction.getNER(sentence))).as("text/html; charset=utf-8");
+  }
+  def getAnalogies = Action { request =>
+
+    val sentence:String = request.body.asJson.get("sentence").toString()
+    println("execute Analogy request")
+
+
+    val analogiesFound = Vector.newBuilder[(String, String)]
+
+    val NERsOfSentence: Array[String] = newAnaloyExtraction.getNER(sentence).split(" ")
+    NERsOfSentence.foreach(x=>{
+      analogies.get(x) match{
+        case Some(foundAnalogy) => analogiesFound += Tuple2(x,foundAnalogy(0)._1)
+        case None => println("No analogy found")
+      }
+    })
+
+    Ok(Json.toJson(analogiesFound.result().map(x=>x._2))).as("text/html; charset=utf-8");
   }
 }

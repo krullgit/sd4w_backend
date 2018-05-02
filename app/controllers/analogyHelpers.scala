@@ -52,4 +52,32 @@ object analogyHelpers {
     println("size AVRO: " + coOccurrenceSize)
     coOccurrences
   }
+
+
+  def readAnalogies(): Map[String, Vector[(String, String)]] = {
+    val analogyBuilder = Map.newBuilder[String, Vector[(String,String)]]
+    val source = scala.io.Source.fromFile("data/cosOfAngleMatrix.txt")
+    val lines: Iterator[String] = source.getLines()
+    while(lines.hasNext){
+      val next = lines.next()
+      val firstComma = next.indexOf(",")
+      val mainToken = next.substring(1,firstComma)
+      val rest = next.substring(firstComma+9,next.size-2)
+      val tuplesAsString: Array[String] = rest.split(",")
+      val tuplesAsList: Array[Array[String]] = tuplesAsString.map(x=>x.split("->").map(x=>x.trim))
+      try {
+        val tuplesAsTuples = tuplesAsList.map(x=>(x(0),x(1))).toVector
+        analogyBuilder += (mainToken->tuplesAsTuples)
+      }catch{
+        case x:ArrayIndexOutOfBoundsException => println("can't parse analogies for: "+mainToken)
+      }
+    }
+    //analogyBuilder.result().foreach(println(_))
+    source.close()
+    analogyBuilder.result()
+  }
+
+  def main(args: Array[String]): Unit = {
+    readAnalogies()
+  }
 }
