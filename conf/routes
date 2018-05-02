@@ -1,0 +1,13 @@
+#GET  /         controllers.HomeController.index(doc1: String ?= "", doc2: String ?= "")
+POST    /                controllers.HomeController_lsaVersion.save()
+
+POST    /getner                controllers.HomeController_lsaVersion.getNER()
+
+
+#->         /v1/posts               v1.post.PostRouter
+
+# Map static resources from the /public folder to the /assets URL path
+#GET        /assets/*file        controllers.Assets.at(path="/public", file)
+
+
+
