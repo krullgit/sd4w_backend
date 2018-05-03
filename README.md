@@ -8,6 +8,9 @@ This is the example project for [Making a REST API in Play](http://developer.lig
 
 ### Running
 
+WICHTIG: Als sbt Projekt in Intellij Ultimate importieren.
+openJDK installieren und in den Project Settings aktivieren
+
 You need to download and install sbt for this application to run.
 
 Once you have sbt installed, the following at the command prompt will start up Play in development mode:
