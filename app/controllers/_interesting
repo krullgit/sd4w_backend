@@ -11,3 +11,13 @@ money,bosch
 [0.0029770357625400292]
 money,company
 [0.13643813050778644]
+
+GET test/_search
+{
+  "_source": "text.string",
+    "query": {
+        "match" : {
+            "posLemmas" : "company takeover buyer Sale email Advisers offer asset potential money energy buy economy economic market"
+        }
+    }
+}
