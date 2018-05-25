@@ -1,27 +1,21 @@
 
 package controllers
 
-import java.io.{File, IOException, PrintWriter}
-import java.util.Properties
+import java.io.PrintWriter
 
-import com.sksamuel.avro4s.AvroOutputStream
+import com.brkyvz.spark.linalg._
 import com.sksamuel.elastic4s.ElasticsearchClientUri
 import com.sksamuel.elastic4s.http.ElasticDsl._
 import com.sksamuel.elastic4s.http.HttpClient
-import com.sksamuel.elastic4s.http.search.{SearchHit, SearchIterator}
+import com.sksamuel.elastic4s.http.search.SearchIterator
 import edu.stanford.nlp.ling.CoreAnnotations.{SentencesAnnotation, _}
 import edu.stanford.nlp.ling.CoreLabel
 import edu.stanford.nlp.pipeline.{Annotation, StanfordCoreNLP}
 import edu.stanford.nlp.util.CoreMap
-import org.apache.avro.file.DataFileReader
-import org.apache.avro.specific.SpecificDatumReader
 import org.apache.spark.mllib.linalg.DenseMatrix
 
 import scala.collection.JavaConverters._
-import scala.collection.immutable.ListMap
-import scala.collection.mutable
 import scala.concurrent.duration._
-import com.brkyvz.spark.linalg.{LazyMatrix, MatrixLike, _}
 
 
 class analogyExtr_lsaVersion(lsa: Vector[Vector[Double]], wordListRows: Vector[String], pipelineNER: StanfordCoreNLP, pipelineSplit: StanfordCoreNLP, var vectorDoc1: DenseMatrix, var lengthFirstWordVector: Double) {
@@ -152,7 +146,7 @@ class analogyExtr_lsaVersion(lsa: Vector[Vector[Double]], wordListRows: Vector[S
         val lsaEntry = lsa(index)
         vectors += lsaEntry
       } else {
-        println("no vector found to: " + tokenEntry)
+        //println("no vector found to: " + tokenEntry) // IMPORTANT PRINT
       }
     }
     val vectorsResult: Seq[Vector[Double]] = vectors.result()
@@ -163,7 +157,6 @@ class analogyExtr_lsaVersion(lsa: Vector[Vector[Double]], wordListRows: Vector[S
     } else { // if not numcols = 2 indicates that
       new DenseMatrix(1, 2, Array(1, 1))
     }
-
   }
 
 
@@ -194,20 +187,19 @@ class analogyExtr_lsaVersion(lsa: Vector[Vector[Double]], wordListRows: Vector[S
   // API
   // - - - - - - - - - - - - - - - - - - - - - - - - -
 
-  def calcDistanceAPI(doc2: String): scala.collection.mutable.ArrayBuffer[Tuple3[Seq[Tuple2[String, Double]], Double,String]] = {
+  def calcDistanceAPI(doc2: String):Double/*: scala.collection.mutable.ArrayBuffer[Tuple3[Seq[Tuple2[String, Double]], Double,String]]*/ = {
     val borderForCosAngle: Double = 0.0 // not important atm
     var cosOfAngleFirstWordSecondWord: Double = 0
-    val returnList = scala.collection.mutable.ArrayBuffer[Tuple3[Seq[Tuple2[String, Double]], Double,String]]()
 
     // - - - - - - - - - - - - - - - - - - - - - - - - -
     //
     // - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    val sentences = ssplit(doc2).toVector
+    //val sentences = ssplit(doc2).toVector
 
-    sentences.foreach(doc2 => {
+    //sentences.foreach(doc2 => {
       val vectorDoc2: DenseMatrix = accumulatedDocumentVector(doc2)
-      if (vectorDoc2.numCols != 2) {
+      if (vectorDoc2.numCols != 2) { // "2" indicates that there is NOT at least one vector which we can sum up
 
         def calcDist(vector: DenseMatrix): Double = {
           val lengthSecondWordVector = lengthOfVector(vector)
@@ -216,33 +208,9 @@ class analogyExtr_lsaVersion(lsa: Vector[Vector[Double]], wordListRows: Vector[S
         }
 
         val cos = calcDist(vectorDoc2)
-        //List[Tuple2[String,Double]]
-        val tokenAndDouble = mutable.LinkedHashMap[String, Double]()
-
-        val tokenList: Seq[String] = getNER(doc2) // get the NER and lemma
-          .split(" ").map(_.toLowerCase()).filter(!_.equals(""))
-
-        for (token <- tokenList) {
-          val tokenVector: DenseMatrix = accumulatedDocumentVector(token)
-          if (tokenVector.numCols != 2) {
-            val tokenLength = lengthOfVector(tokenVector)
-            val x = ((vectorDoc1 * tokenVector.transpose).compute())
-            val xxxx: Double = (x / (lengthFirstWordVector * tokenLength)).compute().toString.toDouble
-            println("token: "+token+" similarity: "+xxxx)
-            tokenAndDouble.put(token, xxxx)
-          } else {
-            println("token: "+token+" similarity: 0")
-            tokenAndDouble.put(token, 0)
-          }
-        }
-
-        returnList.append(Tuple3(tokenAndDouble.toList, cos,doc2))
-
+        return cos
+      }else{
+        return -1
       }
-    })
-    print(returnList)
-    returnList
   }
-
-
 }

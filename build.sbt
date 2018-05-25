@@ -35,7 +35,8 @@ libraryDependencies += "org.apache.spark" %% "spark-mllib" % "2.3.0"
 resolvers += "Spark Packages Repo" at "http://dl.bintray.com/spark-packages/maven"
 libraryDependencies += "brkyvz" % "lazy-linalg" % "0.1.0"
 
-
+// https://mvnrepository.com/artifact/org.apache.opennlp/opennlp-tools
+libraryDependencies += "org.apache.opennlp" % "opennlp-tools" % "1.8.4"
 
 
 // The Play project itself

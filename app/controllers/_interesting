@@ -1,0 +1,13 @@
+// anscheinend haben verschiedene Vektoren verschiedene Gewichte auf den Algorithmus. Vllt wäre es die bessere Strategie, PCA statt SVM zu nehmen
+money,cooking
+[0.8089310377762872]
+money,cooking money
+[0.9999962524079407]
+money,cooking money bosch // bosch hat keine negative Auswirkung auf die similarity
+[0.9999962296060388]
+money,cooking money bosch company // company hingegen hat eine große Auswirkung
+[0.8955916222280977]
+money,bosch
+[0.0029770357625400292]
+money,company
+[0.13643813050778644]

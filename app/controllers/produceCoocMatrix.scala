@@ -37,7 +37,7 @@ import scala.io.Source
 
 
 
-object analogyExtrMain {
+object produceCoocMatrix {
 
   ////////////////////
   // get a Map with all named entities and their transformations (e.g. coca cola -> coca_cola OR 07.05.1987 -> daystreamDate)
@@ -382,7 +382,7 @@ object analogyExtrMain {
     val wordListColsRemainasSet = wordListColsRemain.result().toSet
     println(wordListColsMUSTBEDELETEDasSet)
 
-    
+
     for(i<- 0 until wordListCols.result().size){
       val word = wordListCols.result()(i)
       val pos = getPOS(word)
@@ -642,8 +642,9 @@ object analogyExtrMain {
 
   def main(args: Array[String]): Unit = {
 
-    allCoOccurrences(10) // 1. to get a cooc matrix
-    //calcPCOnTestStrings() // 2. calc pca on it : but very slow, better use python
+    allCoOccurrences(100) // 1. to get a cooc matrix
+    //calcPCOnTestStrings() // 2. calc pca on it : but very slow, better use python (in folder dimReduction)
+
   }
 }
 
