@@ -290,8 +290,8 @@ object produceCoocMatrix_new {
     // execute the method from above which creates the cooc matrix
     // - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    //cooc(iterator = SearchIterator.hits(client, search("test") matchAllQuery() keepAlive (keepAlive = "10m") size 100 sourceInclude List("nerNorm", "nerTyp", "posLemmas"))) // returns 100 values and blocks until the iterator gets to the last element
-    cooc(SearchIterator.hits(client, search("test") query matchQuery("posLemmas", "company takeover buyer Sale email Advisers offer asset potential money energy buy economy economic market") keepAlive (keepAlive = "10m") size (100) sourceInclude (List("nerNorm", "nerTyp", "posLemmas")))) // returns 50 values and blocks until the iterator gets to the last element
+    cooc(iterator = SearchIterator.hits(client, search("test") matchAllQuery() keepAlive (keepAlive = "10m") size 100 sourceInclude List("nerNorm", "nerTyp", "posLemmas"))) // returns 100 values and blocks until the iterator gets to the last element
+    //cooc(SearchIterator.hits(client, search("test") query matchQuery("posLemmas", "company takeover buyer Sale email Advisers offer asset potential money energy buy economy economic market") keepAlive (keepAlive = "10m") size (100) sourceInclude (List("nerNorm", "nerTyp", "posLemmas")))) // returns 50 values and blocks until the iterator gets to the last element
     client.close()
 
 
@@ -614,7 +614,7 @@ object produceCoocMatrix_new {
 
   def main(args: Array[String]): Unit = {
 
-    allCoOccurrences(100000, 50) // 1. to get a cooc matrix
+    allCoOccurrences(600000, 80) // 1. to get a cooc matrix
     //calcPCOnTestStrings() // 2. calc pca on it : but very slow, better use python (in folder dimReduction)
 
   }
