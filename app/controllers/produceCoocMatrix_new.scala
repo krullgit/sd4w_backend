@@ -95,19 +95,19 @@ object produceCoocMatrix_new {
   // get co-occurrences (get the cos between the wordvectors) and save them to a file
   ////////////////////
 
-  def allCoOccurrences(numberOfResults: Int = 10, minimumCoocsFilter: Int) {
+  def allCoOccurrences(numberOfResults: Int = 10, minimumCoocsFilter: Int,maxTokens:Int) {
     implicit val timeout: FiniteDuration = Duration(1000, "seconds") // is the timeout for the SearchIterator.hits method
     val client = HttpClient(ElasticsearchClientUri("localhost", 9200)) // new client
     val windowWidth: Int = 9
 
-    val wordListRows = Vector.newBuilder[String] // Word which occur next to the word in the middle of the window
-    var Indices = scala.collection.immutable.Vector[scala.collection.immutable.Vector[Int]]() // words which are in the middle of the window with the indices of the wordlist
-    var Values = scala.collection.immutable.Vector[scala.collection.immutable.Vector[Double]]() // count of occurences corresponding to the indices
-    var Token = scala.collection.immutable.Vector[scala.collection.immutable.Vector[String]]() // count of occurences corresponding to the indices
+    val wordListRows = Vector.newBuilder[String] // The list of centerElements
+    var Indices = scala.collection.immutable.Vector[scala.collection.immutable.Vector[Int]]() // This is number representation of the token vector. It is calculated later corresponding to a global col wordlist
+    var Values = scala.collection.immutable.Vector[scala.collection.immutable.Vector[Double]]() // This is the count how often a token occurs
+    var Token = scala.collection.immutable.Vector[scala.collection.immutable.Vector[String]]() // This is the word which cooccurs with the centerElement
 
-    val wordListRows2 = Vector.newBuilder[String] // Word which occur next to the word in the middle of the window
-    var Values2 = scala.Vector.newBuilder[scala.collection.immutable.Vector[Double]]
-    val Token2 = scala.Vector.newBuilder[scala.Vector[String]]
+    val wordListRows2 = Vector.newBuilder[String] // The list of centerElements, but filtered (see below)
+    var Values2 = scala.Vector.newBuilder[scala.collection.immutable.Vector[Double]] // filtered (see below)
+    val Token2 = scala.Vector.newBuilder[scala.Vector[String]] // filtered (see below)
 
 
 
@@ -290,7 +290,11 @@ object produceCoocMatrix_new {
     // execute the method from above which creates the cooc matrix
     // - - - - - - - - - - - - - - - - - - - - - - - - -
 
-    cooc(iterator = SearchIterator.hits(client, search("test") matchAllQuery() keepAlive (keepAlive = "10m") size 100 sourceInclude List("nerNorm", "nerTyp", "posLemmas"))) // returns 100 values and blocks until the iterator gets to the last element
+    try {
+      cooc(iterator = SearchIterator.hits(client, search("test") matchAllQuery() keepAlive (keepAlive = "10m") size 100 sourceInclude List("nerNorm", "nerTyp", "posLemmas"))) // returns 100 values and blocks until the iterator gets to the last element
+    }catch {
+      case foo:Exception => println("Error while iterating")
+    }
     //cooc(SearchIterator.hits(client, search("test") query matchQuery("posLemmas", "company takeover buyer Sale email Advisers offer asset potential money energy buy economy economic market") keepAlive (keepAlive = "10m") size (100) sourceInclude (List("nerNorm", "nerTyp", "posLemmas")))) // returns 50 values and blocks until the iterator gets to the last element
     client.close()
 
@@ -301,7 +305,7 @@ object produceCoocMatrix_new {
     println("Token.size: " + Token.size)
     println("Values.size: " + Values.size)
     println("wordListRows.size: " + wordListRows.result().size)
-
+    println("")
 
 
 
@@ -319,9 +323,6 @@ object produceCoocMatrix_new {
     // filter rows which have less than ... coocs
     // - - - - - - - - - - - - - - - - - - - - - - - - -
     println("filter rows which have less than ... coocs")
-    println("")
-
-
 
     for(i<-0 until Token.size){
       if(Token(i).size>minimumCoocsFilter){
@@ -331,6 +332,10 @@ object produceCoocMatrix_new {
       }
     }
 
+    println("Token2.size: "+Token2.result().size)
+    println("Values2.size: " + Values2.result().size)
+    println("wordListRows2.size: " + wordListRows2.result().size)
+    println("")
 
 
 
@@ -338,10 +343,8 @@ object produceCoocMatrix_new {
     // build wordListCols to get a global list for the col words
     // - - - - - - - - - - - - - - - - - - - - - - - - -
     println("build wordListCols")
-    println("")
 
     val wordListCols = Vector.newBuilder[String] // Word which occur next to the word in the middle of the window
-
     for (tokenRow <- Token2.result()) {
       val tmpIndiceRow = Vector.newBuilder[Int]
       for (token <- tokenRow) {
@@ -350,6 +353,9 @@ object produceCoocMatrix_new {
     }
 
     val wordListColsasSet = wordListCols.result().toSet.toVector
+    println("wordListCols: "+wordListCols.result().size)
+    println("wordListColsasSet: "+wordListColsasSet.size)
+    println("")
 
     // - - - - - - - - - - - - - - - - - - - - - - - - -
     // build Indices Vector
@@ -357,10 +363,21 @@ object produceCoocMatrix_new {
     println("build Indices Vector")
     println("")
 
-
-    for (tokenRow <- Token2.result()) {
+    var counter2 = 0
+    for (i <- 0 until Token2.result().size) {
+      val tokenRow = Token2.result()(i)
+      counter2 += 1
+      if(counter2%1 ==0){
+        print("finished / all : " +counter2+" / "+Token2.result().size)
+        println(" // tokenRow.size: "+tokenRow.size +" word: "+wordListRows2.result()(i) )
+      }
       val tmpIndiceRow = Vector.newBuilder[Int]
-      for (token <- tokenRow) {
+      var maxTokensThis = maxTokens
+      if(tokenRow.size<1000){
+        maxTokensThis = tokenRow.size
+      }
+      for (i <- 0 until maxTokens) {
+        val token = tokenRow(i)
         val index: Int =  wordListColsasSet.indexOf(token)
         tmpIndiceRow += index
       }
@@ -368,16 +385,8 @@ object produceCoocMatrix_new {
     }
 
     println("")
-    println("Values2.size: " + Values2.result().size)
-    println("wordListRows2.size: " + wordListRows2.result().size)
-    println("wordListCols.size: " + wordListCols.result().size)
-    println("wordListColsAsSet.size: " + wordListColsasSet.size)
     println("Indices.size: " + Indices.size)
     println("")
-
-
-
-
 
 
 
@@ -614,8 +623,9 @@ object produceCoocMatrix_new {
 
   def main(args: Array[String]): Unit = {
 
-    allCoOccurrences(600000, 80) // 1. to get a cooc matrix
-    //calcPCOnTestStrings() // 2. calc pca on it : but very slow, better use python (in folder dimReduction)
+    allCoOccurrences(100000, 500,1000) // 1. to get a cooc matrix
+    // numberOfResults Max = 450000
+    // calcPCOnTestStrings() // 2. calc pca on it : but very slow, better use python (in folder dimReduction)
 
   }
 }
