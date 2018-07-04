@@ -1,12 +1,11 @@
 package de.tu_berlin.dima.code
 
 
-import java.io.{File, FileNotFoundException, PrintWriter}
+import java.io.{File, PrintWriter}
 import java.nio.charset.Charset
-import java.util.Properties
 
 import com.google.common.io.Files
-import com.sksamuel.elastic4s.{ElasticsearchClientUri, RefreshPolicy}
+import com.sksamuel.elastic4s.ElasticsearchClientUri
 import com.sksamuel.elastic4s.http.ElasticDsl._
 import com.sksamuel.elastic4s.http.HttpClient
 import com.sksamuel.elastic4s.http.search.{SearchHit, SearchIterator}
@@ -14,27 +13,15 @@ import edu.stanford.nlp.ling.CoreAnnotations.{SentencesAnnotation, _}
 import edu.stanford.nlp.ling.CoreLabel
 import edu.stanford.nlp.pipeline.{Annotation, StanfordCoreNLP}
 import edu.stanford.nlp.util.CoreMap
-import java.io.{FileInputStream, InputStream}
-
 import opennlp.tools.chunker.ChunkerME
-import opennlp.tools.chunker._
 
 import scala.collection.JavaConverters._
-import scala.collection.immutable.ListMap
+import scala.collection.immutable
 import scala.concurrent.duration.Duration
-import scala.io.Source
-import scala.util.{Failure, Success, Try}
-import opennlp.tools.chunker
-import java.io.{FileInputStream, InputStream}
-
-import cats.syntax.VectorOps
-import opennlp.tools.chunker.ChunkerME
-import opennlp.tools.chunker._
-
-import scala.collection.mutable
+import edu.stanford.nlp.tagger.maxent.MaxentTagger
 
 
-class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: StanfordCoreNLP, pipelineNER: StanfordCoreNLP, pipelineSplit: StanfordCoreNLP) {
+class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: StanfordCoreNLP, pipelineNER: StanfordCoreNLP, pipelineSplit: StanfordCoreNLP, pipelineDep: StanfordCoreNLP) {
 
   implicit val timeout = Duration(20, "seconds") // is the timeout for the SearchIterator.hits method
   case class chunkAndExtractions(chunks: String = "", extractionTriple: Vector[String] = Vector(""), count: Int = 0)
@@ -46,15 +33,10 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
 
   def chunking(sent: Array[String], pos: Array[String]): Array[String] = {
     val tag: Array[String] = chunker.chunk(sent, pos)
-
-
+    //println(tag.zip(sent).foreach(println(_)))
+    //println(tag.mkString(" "))
     tag
   }
-
-  // - - - - - - - - - - - - - - - - - - - - - - - - -
-  //
-  // - - - - - - - - - - - - - - - - - - - - - - - - -
-
 
   def getPOS(sentence: String): Vector[(String, String)] = { // get POS tags per sentence
     val document: Annotation = new Annotation(sentence)
@@ -68,9 +50,34 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
     } yield (pos, token.originalText()) // return List of POS tags
   }
 
+
+
+  // - - - - - - - - - - - - - - - - - - - - - - - - -
+  // this is just for test case since we do not need dep parse
+  // why is this 10 times faster than pos tagging actually?
+  // - - - - - - - - - - - - - - - - - - - - - - - - -
+  /*
+    def getDEP(sentence: String) = { // get POS tags per sentence
+      // create a document object
+      val document: CoreDocument = new CoreDocument(sentence)
+      // annnotate the document
+      pipelineDep.annotate(document)
+      // examples
+
+      // second sentence
+      val sentence2:CoreSentence = document.sentences().get(0);
+
+      val dependencyParse = sentence2.coreMap()
+      println("SENTENCE: "+sentence)
+      println("PARSE:")
+      println(dependencyParse)
+      println("")
+    }
+  */
   // - - - - - - - - - - - - - - - - - - - - - - - - -
   //
   // - - - - - - - - - - - - - - - - - - - - - - - - -
+  // Nothing to improve
 
   def getListOfProducts(category: String, numberOfProducts: Int): Vector[String] = {
     val client = HttpClient(ElasticsearchClientUri("localhost", 9200)) // new client
@@ -79,9 +86,10 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
 
 
     def hereToServe(): Unit = {
-      val iterator: Iterator[SearchHit] = SearchIterator.hits(client, search("amazon_reviews_meta") query fuzzyQuery("categories", category).fuzziness("1") keepAlive (keepAlive = "10m") size 1000) //sourceInclude List("text.string","id"))
-
-      iterator.foreach(searchhit => {
+      //val iterator: Iterator[SearchHit] = SearchIterator.hits(client, search("amazon_reviews_meta") query fuzzyQuery("categories", category).fuzziness("1") keepAlive (keepAlive = "10m") size 1000) //sourceInclude List("text.string","id"))
+      //println("We could fetch theoretically "+iterator.length+" product IDs") // 400000
+      val iterator2: Iterator[SearchHit] = SearchIterator.hits(client, search("amazon_reviews_meta") query fuzzyQuery("categories", category).fuzziness("1") keepAlive (keepAlive = "10m") size 1000) //sourceInclude List("text.string","id"))
+      iterator2.foreach(searchhit => {
         listBuilder += searchhit.sourceField("asin").toString
         if (listBuilder.result().size > numberOfProducts) return
       })
@@ -93,7 +101,7 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
       search("amazon_reviews_meta" / "doc").keepAlive("1m").size(numberOfProducts) query fuzzyQuery("categories", category).fuzziness("1")
     }.await()
     resp match {
-
+      case Left(failure) => println("We failed " + failure.error)
       case Right(results) => results.result.hits.hits.foreach(x => {
         listBuilder += x.sourceField("asin").toString
       })
@@ -107,25 +115,28 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
   // - - - - - - - - - - - - - - - - - - - - - - - - -
   //
   // - - - - - - - - - - - - - - - - - - - - - - - - -
+  // Nothing to improve
 
-
-  def saveAmazonReviewsInAFile(filename: String, listOfProducts: Vector[String]): Vector[String] = {
+  def getVectorOfRawReviews(filename: String, listOfProducts: Vector[String]): Vector[String] = {
     val listOfListsOfProducts = listOfProducts.grouped(100).toList
     val client = HttpClient(ElasticsearchClientUri("localhost", 9200)) // new client
-    val listBuilder = Vector.newBuilder[String]
+    val reviews = Vector.newBuilder[String]
     for (i <- listOfListsOfProducts.indices) {
-
+      if(i%10 ==0){
+        println("the reviews of how many products we got: " + i * 100)
+      }
       val resp = client.execute {
         search("amazon_reviews").keepAlive("1m").size(10000) query termsQuery("asin.keyword", listOfListsOfProducts(i))
       }.await
       resp match {
-
+        case Left(failure) => println("We failed " + failure.error)
         case Right(results) => results.result.hits.hits.foreach(x => {
-          listBuilder += x.sourceField("reviewText").toString
+          reviews += x.sourceField("reviewText").toString
         })
       }
     }
 
+    // We could write the reviews in a file here
     /*new PrintWriter(s"data/${filename}.txt") { // open new file
       listBuilder.result().foreach(x => write(x + "\n")) // write distinct list to file
       //iLiveToServe.distinct.sorted.map(ssplit(_)).flatten.foreach(x => write(x + "\n")) // write distinct list to file
@@ -134,7 +145,7 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
 
 
     client.close() // close HttpClient
-    listBuilder.result()
+    reviews.result()
     //listBuilder.result().mkString("\n")
   }
 
@@ -142,12 +153,12 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
   // - - - - - - - - - - - - - - - - - - - - - - - - -
   //
   // - - - - - - - - - - - - - - - - - - - - - - - - -
-
+  // Nothing to improve
 
   def ssplit(reviews: Vector[String]): Vector[String] = {
 
     // create blank annotator
-
+    println("start ssplit")
 
     val back = Vector.newBuilder[String]
     reviews.foreach(review => {
@@ -158,8 +169,10 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
       val backTmp: Vector[String] = (for {
         sentence: CoreMap <- sentences
       } yield (sentence)).map(_.toString)
+      // Backtmp contains a Vector with all sentences of a review
+      // Now, we want to put each of these sentences in the final return Vector
       backTmp.foreach(x => back += x)
-
+      if (back.result().size % 10000 == 0) println("splitted: " + back.result().size)
     })
 
 
@@ -182,22 +195,11 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
   }
 
 
-  def estimateRecall(filename: String, sentences: Vector[String]) = {
-    val wordsLowerBorder = 3;
-    val wordsUpperBound = 12;
+  def estimateRecall(filename: String, sentences: Vector[String],maxRedundantChunkPattern: Int, wordsLowerBorder:Int, wordsUpperBound:Int) = {
 
-    //val wordsLowerBorder = 13;
-    //val wordsUpperBound = 30;
-
-    //val text = Source.fromFile(filename).getLines.mkString
-
-
-    ////////////////DEBUG///////////////
-
-
-
-    var countOne: Double = 0
-    var countMoreThanOne: Double = 0
+    // - - - - - - - - - - -
+    // We filter all sentences which do contain one of the following characters
+    // - - - - - - - - - - -
 
     val sentencesFilteredSpeacialCharacters: Seq[String] = sentences.filter(x => {
       val hits = Vector.newBuilder[Int]
@@ -209,65 +211,93 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
       if (hits.result().max >= 0) false else true
     })
 
+    // - - - - - - - - - - -
     // only sentences with "and", "but" or ","
-    val sentFiltered = sentencesFilteredSpeacialCharacters.filter(x => {
-      val hits = Vector.newBuilder[Int]
-      hits += x.indexOf("and")
-      hits += x.indexOf("but")
-      hits += x.indexOf(",")
-      if (hits.result().max < 0) {
-        true
-      } else {
-        false
-      }
-    })
+    // I think I do not need it, since I do not distinguish between conjunctions
+    // - - - - - - - - - - -
 
-    //val sentSplitAtAnd = sentencesFilteredSpeacialCharacters.flatMap(x => x.split("([ ][a][n][d][ ])").map(x => x.trim))
+    /*
+        val sentFiltered = sentencesFilteredSpeacialCharacters.filter(x => {
+          val hits = Vector.newBuilder[Int]
+          hits += x.indexOf("and")
+          hits += x.indexOf("but")
+          hits += x.indexOf(",")
+          if (hits.result().max < 0) {
+            true
+          } else {
+            false
+          }
+        })*/
+
+    // - - - - - - - - - - -
+    // Here is the possibility to split the sentences at conjunction points.
+    // - - - - - - - - - - -
+
+    // val sentSplitAtAnd = sentencesFilteredSpeacialCharacters.flatMap(x => x.split("([ ][a][n][d][ ])").map(x => x.trim))
     // val sentSplitAtBut = sentSplitAtAnd.flatMap(x => x.split("([ ][b][u][t][ ])").map(x => x.trim))
     // val sentSplitAtKomma = sentSplitAtBut.flatMap(x => x.split("([,]+)").map(x => x.trim))
 
+    // - - - - - - - - - - -
+    // Trim sentences like .... see below
+    // & remain only sentences within the length border
+    // - - - - - - - - - - -
 
-    val sentFilteredSigns = sentencesFilteredSpeacialCharacters
-      //.filter(x => x.size <= 80)
+    val sentFilteredSigns: Seq[String] = sentencesFilteredSpeacialCharacters
       .map(x => {
-      val listOfIndices = scala.collection.mutable.ArrayBuffer[Int]()
-      listOfIndices += x.indexOf("\"")
-      listOfIndices += x.indexOf(".")
-      //listOfIndices += x.indexOf("-")
-      listOfIndices += x.indexOf("?")
-      listOfIndices += x.indexOf("!")
-      listOfIndices.filter(x => x < 0)
-      if (!listOfIndices.filter(x => x > 0).isEmpty) {
-        x.substring(0, listOfIndices.filter(x => x > 0).min)
-      } else {
-        x
-      }
-    })
+        val listOfIndices = scala.collection.mutable.ArrayBuffer[Int]()
+        listOfIndices += x.indexOf("\"")
+        listOfIndices += x.indexOf(".")
+        //listOfIndices += x.indexOf("-")
+        listOfIndices += x.indexOf("?")
+        listOfIndices += x.indexOf("!")
+        listOfIndices.filter(x => x < 0)
+        if (!listOfIndices.filter(x => x > 0).isEmpty) {
+          x.substring(0, listOfIndices.filter(x => x > 0).min)
+        } else {
+          x
+        }
+      }).map(_+".")
       .map(x => x.split(" "))
       .filter(x => x.size <= wordsUpperBound && x.size >= wordsLowerBorder)
       .map(x => x.mkString(" "))
+    println("S I Z E - S E N T E N C E S  B E T W E E N  " + wordsLowerBorder + " & " + wordsUpperBound + "  W O R D S: " + sentFilteredSigns.size)
 
+    // - - - - - - - - - - -
+    // just test scenario for dep parsing
+    // - - - - - - - - - - -
 
-    new PrintWriter(s"data/${filename}_ssplit.txt") { // open new file
-      sentFilteredSigns.foreach(x => write(x + "\n"))
-      close // close file
-    }
+    /*
+    var counterDEP = 0
+    val sentWithDep = sentFilteredSigns
+      .map(sent => {
+        counterDEP += 1
+        if (counterDEP % 1000 == 0) println("DEP tagged: " + counterDEP)
+        getDEP(sent)
+      }) // get POS tags
+    */
 
+    // - - - - - - - - - - -
+    // This POS annotation is for only used for sentence chunking below
+    // - - - - - - - - - - -
+
+    println("start pos")
+    var counterPOS = 0
     val sentWithPos: Seq[Vector[(String, String)]] = sentFilteredSigns
-      //.map(x=>x.split(" "))
-      //.filter(x=>x.size==10)
-      //.map(x=>x.mkString(" "))
-      .map(getPOS(_)) // get POS tags
+      .map(sent => {
+        counterPOS += 1
+        if (counterPOS % 10000 == 0) println("POS tagged: " + counterPOS)
+        getPOS(sent)
+      }) // get POS tags
 
 
-    new PrintWriter(s"data/${filename}_pos.txt") { // open new file
-      sentWithPos.foreach(x => write(x + "\n"))
-      close // close file
-    }
+
+    // - - - - - - - - - - -
+    // I tried here to cluster the sentences with POS tagging and therefore consolidaten Verbs, Nouns ... see below
+    // Maybe it is usefull to build a charts for the thesis out of the perfomance gained by this consolidation
+    // - - - - - - - - - - -
+
     //helper1.foreach(x => listBuilder += x.size)
-
-
-
+    //println("size -> occurences: " + listBuilder.result().groupBy(identity).mapValues(_.size))
     //helper01.map(x=>x.map(x=>x._2))
     /*      val sentChunked: Seq[Vector[String]] = sentWithPos //
             .map(x=>x.map(x=>x._1)) // get just the POS
@@ -289,27 +319,100 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
               }
             }))*/
 
+    // - - - - - - - - - - -
+    // Here I chunk the sentences in order to cluster them
+    // - - - - - - - - - - -
 
-
+    println("start chunking")
     val sentChunked: Seq[Array[String]] = sentWithPos.zipWithIndex
       .map { case (vectorOfTuples, i) => {
-
+        if (i % 10000 == 0) println("chunked: " + i)
         chunking(vectorOfTuples.map(x => x._2).toArray, vectorOfTuples.map(x => x._1).toArray)
       }
       }
 
-    val sentChunkedWithoutI = sentChunked.map(x => x.filter(x => x(0).toString != "I")) // I filter the I because I want to reduce every chun to one toke e.g. "big green house"
+    // - - - - - - - - - - -
+    // I group the chunk peaces e.g. "big green house"
+    // - - - - - - - - - - -
 
-    new PrintWriter(s"data/${filename}_chunks.txt") { // open new file
-      sentChunkedWithoutI.foreach(x => write(x.mkString(" ") + "\n"))
+    val sentChunkedWithoutI: Seq[String] = sentChunked.map(x => x.filter(x => x(0).toString != "I").mkString(" ")).map(_.mkString(" ")) // I filter the I because I want to reduce every chun to one toke e.g. "big green house"
+    /*new PrintWriter(s"data/${filename}_chunks.txt") { // open new file
+      sentChunkedWithoutI.foreach(x => write(x + "\n"))
+      close // close file
+    }*/
+
+    // - - - - - - - - - - -
+    // We count the chunks patterns which occurred in the reviews
+    // - - - - - - - - - - -
+
+    val sentChunkedWithoutICount: Vector[(String, Int)] = sentChunkedWithoutI // make List of POS tags to String
+      .groupBy(chunk => chunk) // groupby POS Tag strings
+      .mapValues(_.size) // count occurrences
+      .toVector
+
+    // - - - - - - - - - - -
+    // We just want to retain "maxRedundantChunkPattern" of those sentences, which chunk patterns are the same.
+    // These sentences are saved in "sentFinal"
+    // - - - - - - - - - - -
+
+    val chunkCountChunk: Seq[String] = sentChunkedWithoutICount.map(x => x._1)
+    var chunkCountCountFinished: immutable.Seq[Int] = Vector.fill(chunkCountChunk.size)(0)
+    val sentFinal = Vector.newBuilder[String]
+    sentChunkedWithoutI.zipWithIndex.foreach(sentAndIndex => {
+      val sentChunks: String =  sentAndIndex._1
+      val index: Int = sentAndIndex._2
+      val sent: String =  sentFilteredSigns(index)
+      val positionOfChunk: Int = chunkCountChunk.indexOf(sentChunks)
+      if(positionOfChunk >= 0){
+        val countFinshed = chunkCountCountFinished(positionOfChunk)
+        if(countFinshed < maxRedundantChunkPattern){
+          sentFinal += sent
+          chunkCountCountFinished = chunkCountCountFinished.updated(positionOfChunk,countFinshed+1)
+        }else{
+        }
+      }else{
+        println("THIS IS BAD")
+      }
+    })
+
+    // - - - - - - - - - - -
+    // Show sentences with the same chunk pattern just for test cases
+    // - - - - - - - - - - -
+
+    /*
+    for(i <- 0 until sentChunkedWithoutICount.size){
+      val chunkCount = sentChunkedWithoutICount(i)._2
+      if(chunkCount>1){
+        println("chunkCount: "+chunkCount)
+        val chunkpattern: String = sentChunkedWithoutICount(i)._1
+        val indizesWhereChunkPatternMatches: Seq[Int] = sentChunkedWithoutI.zipWithIndex.filter(_._1==chunkpattern).map(_._2)
+        indizesWhereChunkPatternMatches.foreach(x=>println(sentFilteredSigns(x)))
+        println("")
+      }
+    }
+    */
+
+
+    println("SENTENCES (AT MOST "+maxRedundantChunkPattern+" CHUNK PATTERN OCCURRENCES) : "+sentFinal.result().size)
+
+    // - - - - - - - - - - -
+    // We save the reviews in a file to run openIE in it
+    // These sentences are saved in "sentFinal"
+    // - - - - - - - - - - -
+
+    new PrintWriter(s"data/${filename}_ssplit.txt") { // open new file
+      sentFinal.result().foreach(x => write(x + "\n"))
+      //sentences.foreach(x => write(x + "\n"))
       close // close file
     }
 
-    sentChunkedWithoutI.map(_.mkString(" ")) // make List of POS tags to String
-      .groupBy(pos => pos) // groupby POS Tag strings
-      .mapValues(_.size) // count occurrences
-      .toSeq // order them
-      .foreach(x => {
+    // - - - - - - - - - - -
+    // We calculate how many chunk pattern occur at least twice
+    // - - - - - - - - - - -
+
+    var countOne: Double = 0
+    var countMoreThanOne: Double = 0
+    sentChunkedWithoutICount.foreach(x => {
       if (x._2 == 1) {
         countOne += 1
       }
@@ -317,9 +420,9 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
         countMoreThanOne += 1
       }
     })
-
-
-
+    println("countOne: " + countOne)
+    println("countMoreThanOne: " + countMoreThanOne)
+    println("So viel Prozent der Pos Kombinationen kommen mindestens doppelt vor: " + (countMoreThanOne / (countOne + countMoreThanOne)) * 100)
 
   }
 
@@ -330,7 +433,7 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
   def parseExtractions(filename: String) = {
 
 
-
+    println("loadFiles")
     val inputFile1: File = new File("data/" + filename) // read from file
     val extr: Vector[String] = Files.toString(inputFile1, Charset.forName("UTF-8")).split("\n\n").toVector
     val justSentences = extr.map(x => x.split("\n")(0))
@@ -338,7 +441,7 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
 
     var counter1 = 0
     val justChunks: Seq[Array[String]] = extr.map(sentAndExtr => {
-
+      println("counter1: " + counter1)
       counter1 += 1
       val splitted = sentAndExtr.split("\n")(0)
       val pos = getPOS(splitted)
@@ -346,14 +449,14 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
       chunked
     })
 
-
+    println("parsedExtractions")
     var counter2 = 0
     val extractions: Vector[List[List[String]]] = extr
       .map(_.split("\n")) // split the lines in one extraction part
       .map(_.toList)
       .map(extractionPart => extractionPart
         .map(line => {
-
+          println("counter2: " + counter2)
           counter2 += 1
           val indexFirst = line.indexOf("(")
           val indexLast = line.lastIndexOf(")")
@@ -370,21 +473,21 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
         .filter(line => !line.mkString(" ").contains("L:"))
       )
 
-
+    println("rulesAll")
     var counter3 = 0
 
     val rulesAll = Vector.newBuilder[Vector[String]]
     val parsedExtractionsSize = extractions.size
     for (extractionIndex <- extractions.indices) {
-
+      println("counter3: " + counter3)
       counter3 += 1
-
+      //println("rulesAll: " + extractionIndex + " of " + parsedExtractionsSize)
       val rules = Vector.newBuilder[String]
 
       //rules += (for (i <- parsedExtractions(extracionCounter)) yield {
       //  i._1
       //}).mkString(" ")
-
+      //println(parsedExtractions(i)(0)(0)) // print sentences
 
       for (lineNumberOfExtraction <- extractions(extractionIndex).indices) {
         var rule: String = ""
@@ -404,9 +507,9 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
               })
 
 
-
+              //if (extractions(extractionIndex)(0).mkString(" ").contains("period")){println(extractions(extractionIndex)(0).mkString(" "))}
               if (!tmpbool) {
-
+                //if (extractions(extractionIndex)(0).mkString(" ").contains("period")){println(extractions(extractionIndex)(0).mkString(" "))}
                 for (partOfTriple <- extractions(extractionIndex)(lineNumberOfExtraction)) {
                   partOfTriple.split(" ").zipWithIndex.foreach { case (wordInExtracion, wordInExtracionIndex) => { // for every word in one triple part
 
@@ -466,17 +569,17 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
 
                     rule += occurenceIndices
                     if (extractions(extractionIndex)(0).mkString(" ").contains("period")) {
-
-
-
-
+                      println(extractions(extractionIndex)(0).mkString(" "))
+                      println(extractions(extractionIndex)(lineNumberOfExtraction))
+                      println(rule)
+                      println(wordInExtracionCleaned)
                     }
 
                     //rule += "#" + wordInExtracion // mark that this word accours more than one time (for later processing) TODO: fix that
                     if (wordInExtracionIndex >= partOfTriple.split(" ").size - 1) {
                       rule += ";"
                     } else {
-
+                      //println("ERROR1")
                       rule += " "
                     }
 
@@ -504,25 +607,25 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
 
 
     val rules = rulesAll.result()
-
+    //rules.zip(extrChunked).foreach( x=>{println(x._1.mkString(" "));println(x._2.mkString(" ")+"\n")})
 
 
     val chunksAndExtractions = Vector.newBuilder[chunkAndExtractions]
     var chunksAndExtractionMissmatch = 0
     var misscreatedExtraction = 0
 
-
-
+    println("rules.size: " + rules.size)
+    println("chunksOfSentence.size: " + justChunks.size)
 
 
     var counter4 = 0
 
     //for(i <- 0 to 20){
     for (i <- 0 to rules.size - 1) {
-
+      println("counter4: " + counter4)
       counter4 += 1
-
-
+      //println("\n")
+      //println(extractions(i)(0).zipWithIndex)
       val rulesOfSentence: Vector[String] = rules(i)
       val chunksOfSentence: Vector[String] = justChunks(i).toVector
       for (j <- 0 to rulesOfSentence.size - 1) {
@@ -538,13 +641,13 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
           while (chunksOfSentenceUpdated.map(x => x(0).toString).contains("I")) {
             val chunksOfSentenceOnlyFirstChar: Vector[String] = chunksOfSentenceUpdated.map(x => x(0).toString)
             val indexOfI = chunksOfSentenceOnlyFirstChar.indexOf("I")
-
-
+            //println("indexOfI: "+indexOfI)
+            //println("chunksOfSentenceUpdated: "+chunksOfSentenceUpdated)
             chunksOfSentenceUpdated = chunksOfSentenceUpdated.take(indexOfI) ++ chunksOfSentenceUpdated.drop(indexOfI + 1)
-
-
+            //println("chunksOfSentenceUpdated: "+chunksOfSentenceUpdated)
+            //println("ruleOfSentenceTripleUpdated: "+ruleOfSentenceTripleUpdated)
             ruleOfSentenceTripleUpdated = ruleOfSentenceTripleUpdated.map(part => {
-
+              //println("ruleOfSentenceTripleUpdated Before: "+part.split(" ").toVector)
               val partSplitted = part.split(" ").filter(_ != "")
               var ruleOfSentenceTripleUpdatedPartAsVector: Vector[Int] = Vector[Int]()
 
@@ -560,18 +663,18 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
                 if (x >= indexOfI) x - 1 else x
               })
 
-
+              //println("ruleOfSentenceTripleUpdatedPartAsVectorUpdated: "+ruleOfSentenceTripleUpdatedPartAsVectorUpdated)
 
               ruleOfSentenceTripleUpdatedPartAsVectorUpdated.mkString(" ")
             })
           }
-
+          //println("ruleOfSentenceTripleUpdated: "+ruleOfSentenceTripleUpdated)
           if (!ruleOfSentenceTripleUpdated.contains("")) {
 
 
             /*if(chunksOfSentenceUpdated.mkString("$") == "B-NP$B-VP$B-NP$B-PP$B-NP"){
-
-
+              //println(justChunks(i).mkString(" "))
+              println(justSentences(i))
             }*/
 
             chunksAndExtractions += chunkAndExtractions(chunksOfSentenceUpdated.mkString("$"), ruleOfSentenceTripleUpdated)
@@ -582,8 +685,8 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
       }
     }
 
-
-
+    println("chunksAndExtractionMissmatch: " + chunksAndExtractionMissmatch)
+    println("misscreatedExtraction: " + misscreatedExtraction)
 
     /*
     new PrintWriter(s"data/test3.txt") { // open new file
@@ -603,7 +706,7 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
     var chunksAndExtractionsDisjunct = Vector[chunkAndExtractions]()
     var counter5 = 0
     for (i <- 0 until chunksAndExtractionsResult.size) {
-
+      println("counter5: " + counter5)
       counter5 += 1
       val chunksAndExtraction = chunkAndExtractions(chunksAndExtractionsResult(i).chunks, chunksAndExtractionsResult(i).extractionTriple, 1)
       var chunkFoundIndex: Int = -1
@@ -647,11 +750,11 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
           intField("count")
         ))
     }
-
+    println("createIndex FINISHED")
     var counter6 = 0
 
     for (i <- 0 to chunksAndExtractions.size - 1) {
-
+      println("counter6: " + counter6)
       counter6 += 1
       val chunkAndExtraction = chunksAndExtractions(i)
 
@@ -673,10 +776,10 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
       print("Sentence: ")
       val sentence: String = scala.io.StdIn.readLine()
       val extracted = extract(sentence)
-      for(i <- 0 until extracted._1.size){
+      for (i <- 0 until extracted._1.size) {
         val extraction = extracted._1(i)
         val count = extracted._2(i)
-
+        println("[" + count + "] " + extraction)
       }
 
 
@@ -685,7 +788,7 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
 
 
   def extract(sentence: String): (Vector[(String, String, String)], Vector[Int]) = {
-    val extractionsBack = Vector.newBuilder[(String,String,String)]
+    val extractionsBack = Vector.newBuilder[(String, String, String)]
     val extractionsCountBack = Vector.newBuilder[Int]
 
     // - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -695,7 +798,7 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
 
     //(sentenceAsVector, nerVectorResult, tokenVectorResult)
     val getner = getNER(sentence)
-    val sentenceSplitted: Vector[String] = getner._1.filterNot(x => x == "." || x == "?" || x == "!" || x == "'s" || x == "’s") // TODO: just filtering the "'s" might not be sufficient in every case e.g. when we whant to show properties | POS tag of 's is "POS" | but nevertheless important for corrent sentence chunking see "Bsp 1.:"
+    val sentenceSplitted: Vector[String] = getner._1.filterNot(x => x == "." || x == "?" || x == "!" || x == "'s" || x == "’s") // TODO: just filtering the "'s" might not be sufficient in every case e.g. when we want to show properties | POS tag of 's is "POS" | but nevertheless important for correct sentence chunking see "Bsp 1.:"
     val tokenVector = getner._3
     val nerVector = getner._2
 
@@ -714,15 +817,15 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
     if (sentenceSplittedComma.size > 1) {
       //if (false) {
       val sentenceCombinations = sentenceSplittedComma.toSet[String].subsets().map(_.toVector).toVector // get all combination of sentence-parts
-
+      //println("sentenceCombinations: "+sentenceCombinations)
       for (combi <- sentenceCombinations) {
         if (combi.size == 2) { // process only part-senetces in tuples or alone
-
+          //println("combi: "+combi)
           val sentence = combi.mkString(" , ") // mk a sent out of the combination
-
-
+          println("\n")
+          println("sentenceCombi: " + sentence)
           val sentenceSplitted: Vector[String] = sentence.split(" ").toVector
-
+          //println ("sentenceChunked: "+sentenceChunked)
           if (sentenceSplitted.size > 0) {
             var extractionFinished = 0
             var dropRight = 0
@@ -736,10 +839,10 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
           // this is the case that we have to try the inversed order of the sentence pairs
 
           val sentence2 = combi.reverse.mkString(" , ") // mk a sent out of the combination
-
-
+          println("\n")
+          println("sentenceCombi: " + sentence2)
           val sentenceSplitted2: Vector[String] = sentence2.split(" ").toVector
-
+          //println ("sentenceChunked: "+sentenceChunked)
           if (sentenceSplitted.size > 0) {
             var extractionFinished = 0
             var dropRight = 0
@@ -750,12 +853,12 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
             }
           }
         } else if (combi.size == 1) {
-
+          //println("combi: "+combi)
           val sentence = combi.mkString(" , ") // mk a sent out of the combination
-
-
+          println("\n")
+          println("sentenceCombi: " + sentence)
           var sentenceSplitted: Vector[String] = sentence.split(" ").toVector
-
+          //println ("sentenceChunked: "+sentenceChunked)
 
 
           if (sentenceSplitted.size > 0) {
@@ -773,7 +876,7 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
     } else {
       if (sentenceSplitted.size > 0) {
         var extractionFinished = 0
-
+        //println("sentenceSplitted.size: "+sentenceSplitted.size)
         var dropRight = 0
         while (extractionFinished == 0 && sentenceSplitted.dropRight(dropRight).size > 3) { // TODO make this more efficient
           getExtractions(sentenceSplitted.dropRight(dropRight), pipelineNER)
@@ -794,7 +897,7 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
       implicit val timeout = Duration(20, "seconds") // is the timeout for the SearchIterator.hits method
 
       // TODO: make this more efficient
-
+      //println(sentenceSplitted.size)
       //if(sentenceSplitted(0) == "who" || sentenceSplitted(0) == "Who" || sentenceSplitted(0) == "Why"|| sentenceSplitted(0) == "why"|| sentenceSplitted(0) == "how"|| sentenceSplitted(0) == "How"|| sentenceSplitted(0) == "What"|| sentenceSplitted(0) == "what"|| sentenceSplitted(0) == "Where"|| sentenceSplitted(0) == "where"|| sentenceSplitted(0) == "When"|| sentenceSplitted(0) == "when"|| sentenceSplitted(0) == "Which"|| sentenceSplitted(0) == "which"){
       //    return -2
       //}
@@ -805,30 +908,30 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
       // apply the sentence chunker
       // - - - - - - - - - - - - - - - - - - - - - - - - -
 
-
-
+      //println("sentenceSplitted: "+sentenceSplitted)
+      //println("sentence: "+sentence)
       //val sentenceChunked: Vector[String] = sentence.split(" ").toVector
 
-
+      //println("sentenceSplitted: "+sentenceSplitted)
 
       val pos: Vector[(String, String)] = getPOS(sentenceSplitted.mkString(" "))
-
+      //println(pos)
       var chunkedTags: Vector[String] = chunking(pos.map(x => x._2).toArray, pos.map(x => x._1).toArray).toVector
-
-
+      //println("chunkedTags: "+chunkedTags)
+      //println(chunkedTags)
       // I filter the comma after the chunks are correctly built
       // This might be not very efficient since we have to filter the sentence and the chunk list as well
       // TODO: make this more efficient
       val positionOfComma = sentenceSplitted.indexOf(",")
       if (positionOfComma >= 0) {
-
+        //println("comma found")
         chunkedTags = chunkedTags.zipWithIndex.filter(_._2 != positionOfComma).map(_._1)
         sentenceSplittedWithoutComma = sentenceSplitted.zipWithIndex.filter(_._2 != positionOfComma).map(_._1)
       } else {
         sentenceSplittedWithoutComma = sentenceSplitted
       }
-
-
+      //println("chunkedTags: "+chunkedTags)
+      //println("sentenceSplittedWithoutComma: "+sentenceSplittedWithoutComma)
 
 
       // - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -857,8 +960,8 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
       val chunkedTagsReducedResult: Vector[String] = chunkedTagsReduced.result()
       if (chunkedTagsReducedResult.size <= 2) return extractionsBack.result()
       var chunkedSentenceReducedResult: Vector[String] = chunkedSentenceReduced.result().map(_.trim)
-
-
+      println("chunkedSentenceReducedResult: " + chunkedSentenceReducedResult)
+      println("chunkedTagsReducedResult: " + chunkedTagsReducedResult)
 
 
       // - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -866,26 +969,26 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
       // - - - - - - - - - - - - - - - - - - - - - - - - -
 
       val chunkedSentenceReducedResultXY = chunkedSentenceReducedResult.map(chunk => {
-
+        //println("word: "+chunk)
         var chunkSplitted = chunk.split(" ").toVector
         for (i <- 0 until nerVector.size) {
           val ner = nerVector(i)
           val index = chunkSplitted.indexOf(ner)
-
-
+          //println("ner: "+ner)
+          //println("index: "+index)
           if (index >= 0) {
             chunkSplitted = chunkSplitted.updated(index, tokenVector(i))
-
-
+            //println("new: "+chunkSplitted)
+            //println("splittedChunk: "+splittedChunk)
           }
         }
         chunkSplitted.mkString(" ")
       })
-
-
-
-
-
+      //println("chunkedSentenceReducedResultXY: "+chunkedSentenceReducedResultXY)
+      //println("sentenceChunked: "+sentenceChunked.zip(chunkedTags))
+      //println("chunkedTags: "+chunkedTags)
+      //println("chunkedTagsReducedResult: "+chunkedTagsReducedResult.mkString(" "))
+      //println("chunkedSentenceReducedResult: "+chunkedSentenceReducedResult)
 
 
       // - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -927,7 +1030,7 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
       // print extraction in dependency to the quality (count) of them
       // - - - - - - - - - - - - - - - - - - - - - - - - -
 
-
+      //println("extractions.result(): "+extractions.result().zip(extractionsCount.result()))
       if (extractions.result().size > 0) { // is there a result
       case class extractionClass(part1: Vector[Int], part2: Vector[Int], part3: Vector[Int])
         for (i <- 0 until (if (extractions.result().size > 1) 2 else extractions.result().size)) { // give maximum 2 extractions
@@ -937,9 +1040,9 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
           val temp = extractions.result()(i).split(",")
           //.map(x=>x.split(" ").toVector).toVector
           val extraction: extractionClass = extractionClass(temp(0).split(" ").map(_.toInt).toVector, temp(1).split(" ").map(_.toInt).toVector, temp(2).split(" ").map(_.toInt).toVector)
-
+          //println("max 3: "+extraction.part3.max+" size: "+(chunkedTagsReduced.size-1))
           if (extraction.part1.max > chunkedSentenceReducedResultXY.size - 1 || extraction.part2.max > chunkedSentenceReducedResultXY.size - 1 || extraction.part3.max > chunkedSentenceReducedResult.size - 1) {
-
+            println("index out") // TODO where does it happen that sometimes the extraction index is higher than the length of the pattern
           } else {
             extractionsCountBack += extractionsCountResult(i)
             val extractionsBackTMP = Vector.newBuilder[String]
@@ -959,12 +1062,13 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
             })
             extractionsBackTMP += tmp.trim
             val extractionsBackTMPResult = extractionsBackTMP.result()
-            extractionsBack += Tuple3(extractionsBackTMPResult(0),extractionsBackTMPResult(1),extractionsBackTMPResult(2))
+            extractionsBack += Tuple3(extractionsBackTMPResult(0), extractionsBackTMPResult(1), extractionsBackTMPResult(2))
           }
         }
       }
     }
-    Tuple2(extractionsBack.result(),extractionsCountBack.result())
+
+    Tuple2(extractionsBack.result(), extractionsCountBack.result())
   }
 
   // - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -1014,8 +1118,8 @@ class getExtractions(client: HttpClient, chunker: ChunkerME, pipelinePos: Stanfo
       sentenceAsVector = sentenceAsVector.updated(index, ner)
     }
 
-
-
+    println("sentenceAsVector: " + sentenceAsVector)
+    //println("indexInOriginalSentenceResult: " + indexInOriginalSentenceResult)
 
     (sentenceAsVector, nerVectorResult, tokenVectorResult)
   }

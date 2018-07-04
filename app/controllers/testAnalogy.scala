@@ -9,6 +9,14 @@ import scala.io.Source
 
 
 object testAnalogy {
+  // lsa1 = kleines trainingsset
+  // lsa2 = großes trainingsset (30 mio token) -> 300 svm dim
+  // lsa3 = großes trainingsset (30 mio token) -> 600 svm dim
+  // lsa4 = großes trainingsset (30 mio token) -> 50 svm dim
+  // lsa5 = großes trainingsset (30 mio token) -> 1200 svm dim
+
+  val lsaName = "lsa5.txt"
+  val wordListName = "wordListRows2.txt" // lsa1 needs wordListRows1
 
   // - - - - - - - - - - - - - - - - - - - - - - - - -
   // get lsa data
@@ -16,12 +24,12 @@ object testAnalogy {
 
   println("READ lsa")
   val lsa = scala.Vector.newBuilder[scala.Vector[Double]]
-  val lsaFile = Source.fromFile("data/lsa2.txt").getLines.toVector
+  val lsaFile = Source.fromFile("data/"+lsaName).getLines.toVector
   for (i <- 0 until lsaFile.length) {
     lsa += (lsaFile(i).split(" ").map(_.toDouble).toVector)
   }
   println("lsa: " + lsa.result().size)
-  val wordListRows: Vector[String] = Source.fromFile("data/wordListRows.txt").getLines().toVector(0).split(",").toVector
+  val wordListRows: Vector[String] = Source.fromFile("data/"+wordListName).getLines().toVector(0).split(",").toVector
   println("wordListRows: " + wordListRows.size)
   println("READY lsa")
 
@@ -66,35 +74,46 @@ object testAnalogy {
       try {
         distance = extraObj.calcDistanceAPI(twoWords(1))
       } catch {
-        case e: Exception => e.printStackTrace
+        case e: Exception => println("no result")
       }
       println("[" + distance + "]")
-    }else if(twoWords.size==1){
-      calcDoc1(twoWords(0), extraObj)
-      var distances = Vector.newBuilder[Double]
-      for(i<-0 until wordListRows.size){
-        if(i%1000==0)println(i)
-        try {
-          distances += extraObj.calcDistanceAPI(wordListRows(i))
-        } catch {
-          case e: Exception => e.printStackTrace
+    } else if (twoWords.size == 1) {
+      try {
+        calcDoc1(twoWords(0), extraObj)
+        var distances = Vector.newBuilder[Double]
+        for (i <- 0 until wordListRows.size) {
+          if (i % 1000 == 0) println(i)
+
+            distances += extraObj.calcDistanceAPI(wordListRows(i))
+
+
         }
+        val distancesSorted = distances.result().sorted.reverse.filterNot(_.toString.equals("NaN"))
+        val indexOfMinDistance1 = distances.result().indexOf(distancesSorted(1))
+        val indexOfMinDistance2 = distances.result().indexOf(distancesSorted(2))
+        val indexOfMinDistance3 = distances.result().indexOf(distancesSorted(3))
+        val indexOfMinDistance4 = distances.result().indexOf(distancesSorted(4))
+        val indexOfMinDistance5 = distances.result().indexOf(distancesSorted(5))
+        val indexOfMinDistance6 = distances.result().indexOf(distancesSorted(6))
+        val indexOfMinDistance7 = distances.result().indexOf(distancesSorted(7))
+        val indexOfMinDistance8 = distances.result().indexOf(distancesSorted(8))
+        println("[" + distancesSorted(1) + "] " + wordListRows(indexOfMinDistance1))
+        println("[" + distancesSorted(2) + "] " + wordListRows(indexOfMinDistance2))
+        println("[" + distancesSorted(3) + "] " + wordListRows(indexOfMinDistance3))
+        println("[" + distancesSorted(4) + "] " + wordListRows(indexOfMinDistance4))
+        println("[" + distancesSorted(4) + "] " + wordListRows(indexOfMinDistance5))
+        println("[" + distancesSorted(4) + "] " + wordListRows(indexOfMinDistance6))
+        println("[" + distancesSorted(4) + "] " + wordListRows(indexOfMinDistance7))
+        println("[" + distancesSorted(4) + "] " + wordListRows(indexOfMinDistance8))
+      } catch {
+        case e: Exception => println("no result")
       }
-      val distancesSorted = distances.result().sorted.reverse.filterNot(_.toString.equals("NaN"))
-      val indexOfMinDistance1 = distances.result().indexOf(distancesSorted(1))
-      val indexOfMinDistance2 = distances.result().indexOf(distancesSorted(2))
-      val indexOfMinDistance3 = distances.result().indexOf(distancesSorted(3))
-      val indexOfMinDistance4 = distances.result().indexOf(distancesSorted(4))
-      println("[" + distancesSorted(1) + "] "+wordListRows(indexOfMinDistance1))
-      println("[" + distancesSorted(2) + "] "+wordListRows(indexOfMinDistance2))
-      println("[" + distancesSorted(3) + "] "+wordListRows(indexOfMinDistance3))
-      println("[" + distancesSorted(4) + "] "+wordListRows(indexOfMinDistance4))
     }
   }
 
 
 
-  def main(args: Array[String]): Unit = {
+def main (args: Array[String] ): Unit = {
 
-  }
+}
 }

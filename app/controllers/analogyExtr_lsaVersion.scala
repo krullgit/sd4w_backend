@@ -142,6 +142,7 @@ class analogyExtr_lsaVersion(lsa: Vector[Vector[Double]], wordListRows: Vector[S
       val tokenEntry = token(i)
 
       val index = wordListRows.indexOf(tokenEntry)
+      //println("wordListRows.indexOf(tokenEntry): "+index)
       if (index >= 0) {
         val lsaEntry = lsa(index)
         vectors += lsaEntry
@@ -153,6 +154,7 @@ class analogyExtr_lsaVersion(lsa: Vector[Vector[Double]], wordListRows: Vector[S
     //val vectorSum: MatrixLike = vectorsResult.reduce(_ + _).compute()
     if (vectorsResult.size > 0) {// check if there is at least one vector which we can sum up
       val vectorsSum: Vector[Double] = vectorsResult.reduce((x, y) => x.zip(y).map { case (x, y) => x + y })
+      //println("vectorsSum.toArray: "+vectorsSum.toVector)
       new DenseMatrix(1, vectorsSum.length, vectorsSum.toArray)
     } else { // if not numcols = 2 indicates that
       new DenseMatrix(1, 2, Array(1, 1))

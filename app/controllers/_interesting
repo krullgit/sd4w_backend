@@ -21,3 +21,17 @@ GET test/_search
         }
     }
 }
+
+cheat -> 600 dim winner
+company -> no winner // bei 1200 dim überraschende Verbesserung (agency and no film at Nr.1)
+bank -> 600 dim winner
+takeover -> 600 / 300  dim winner
+shareholder -> 600 dim winner
+women -> 600 dim winner
+economy -> 600 dim winner
+market -> 600 / 300  dim winner
+bankruptcy
+
+50 dim generell gut aber starke Ausreißer (women -> dog / cat 0,97) aber ebenfalls bei dim 300 ähnlich
+
+bankruptcy company,any,bankruptcy company
